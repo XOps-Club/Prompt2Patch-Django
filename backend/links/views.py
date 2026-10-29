@@ -66,16 +66,14 @@ def links_collection_api(request):
                 'details': {'originalUrl': ['Target URL is required']}
             }, status=400)
 
-        # Basic URL format validation
-        if not (original_url.startswith('http://') or original_url.startswith('https://')):
-            return JsonResponse({
-                'error': 'Validation failed',
-                'details': {'originalUrl': ['URL must start with http:// or https://']}
-            }, status=400)
-
         try:
             link = services.create_link(original_url, custom_slug)
             return JsonResponse(link.to_dict(), status=201)
+        except services.InvalidTargetURLError as e:
+            return JsonResponse({
+                'error': 'Validation failed',
+                'details': {'originalUrl': [str(e)]}
+            }, status=400)
         except ValueError as e:
             return JsonResponse({'error': str(e)}, status=409)
         except Exception as e:

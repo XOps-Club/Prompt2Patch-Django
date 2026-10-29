@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from django.conf import settings
@@ -26,6 +27,30 @@ class LinkSnipStandardAPITests(TestCase):
 
         with self.assertRaises(ValueError, msg="Expected ValueError when reusing an active custom slug"):
             services.create_link('https://example.com/second', custom_slug=slug)
+
+    def test_rejects_unsupported_and_malformed_target_urls(self):
+        invalid_urls = [
+            'javascript:alert(1)',
+            'file:///etc/passwd',
+            'ftp://example.com/file',
+            'https://',
+            'http://example.com:invalid',
+            'https://exa mple.com',
+        ]
+
+        for url in invalid_urls:
+            with self.subTest(url=url):
+                with self.assertRaises(services.InvalidTargetURLError):
+                    services.create_link(url)
+
+    def test_create_api_returns_bad_request_for_invalid_target_url(self):
+        response = self.client.post(
+            '/links',
+            data=json.dumps({'originalUrl': 'javascript:alert(1)'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_records_clicks_and_updates_click_count(self):
         link = services.create_link('https://example.com/click-test')
@@ -76,6 +101,11 @@ class LinkSnipCoreOperationsAndAnalyticsTests(TestCase):
 
         active_check = services.get_link_by_short_code(link.short_code)
         self.assertIsNone(active_check, "Archived link should not be active via short code lookup")
+        self.assertEqual(
+            self.client.get(f'/{link.short_code}').status_code,
+            404,
+            "Archived short codes should not redirect",
+        )
 
     def test_restores_archived_link_back_to_active_state(self):
         """Verifies restoring an archived link back to active state."""
