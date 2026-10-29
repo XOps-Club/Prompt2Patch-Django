@@ -7,9 +7,9 @@
 ---
 
 ## 1. Team Information
-- **Team Name**: 
-- **Members**: 1. ______________________  2. ______________________  3. ______________________
-- **Working Branch**: `team-solution`
+- **Team Name**: Vector Zero
+- **Members**: 1. Aakarshi Dwivedi  2. Michael Shah
+- **Working Branch**: `Vecter_Zero-solution`
 
 ---
 
@@ -38,8 +38,9 @@
 ---
 
 ## 3. Final Submission Checklist Before Calling Judge
-- [ ] All test suites pass 100% (`make test`)
-- [ ] Web application manually verified in browser (`make run`)
-- [ ] Code committed to a dedicated branch (`team-solution`, not `main`)
-- [ ] Pull Request opened with clean description
+- [x] All links tests pass 100% (`python manage.py test links` — 14 tests)
+- [x] Django system check passes (`python manage.py check`)
+- [x] Web application manually verified locally (`http://127.0.0.1:8000/`)
+- [x] Code committed to a dedicated branch (`Vecter_Zero-solution`, not `main`)
+- [x] Pull Request opened with a clean description
 - [ ] 3 prompt sequences documented above in Section 2
