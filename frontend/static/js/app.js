@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // QR Code generator helper
   function getQrCodeUrl(shortUrl) {
     if (!shortUrl) return '';
-    return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(shortUrl)}`;
   }
 
   // Modal Control
