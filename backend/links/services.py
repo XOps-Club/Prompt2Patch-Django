@@ -1,10 +1,19 @@
 import secrets
 import string
 import hashlib
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
+from django.db import transaction
 from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
 from .models import Link, ClickLog
+
+
+class LinkValidationError(ValueError):
+    """Raised when link input or URL validation fails."""
+
+
+class SlugConflictError(ValueError):
+    """Raised when a short-code slug conflicts with an active link."""
 
 
 def generate_random_slug(length: int = 6) -> str:
@@ -21,25 +30,43 @@ def calculate_conversion_rate(unique_clicks: int, total_clicks: int) -> float:
 
 
 def get_qr_code_url(short_url: str) -> str:
-    """Generates QR code image URL for a given short URL."""
+    """Generates a QR code API URL for a short link."""
     if not short_url:
         return ''
-    return ''
+    query = urlencode({'size': '180x180', 'data': short_url})
+    return f'https://api.qrserver.com/v1/create-qr-code/?{query}'
 
 
 def create_link(original_url: str, custom_slug: str = None) -> Link:
     """Creates a new shortened link with optional custom slug."""
+    if not isinstance(original_url, str):
+        raise LinkValidationError('Only http:// and https:// URLs are supported')
+    target_url = original_url.strip()
+    if not target_url or any(character.isspace() for character in target_url):
+        raise LinkValidationError('Only http:// and https:// URLs are supported')
+
+    try:
+        parsed = urlparse(target_url)
+        hostname = parsed.hostname
+    except ValueError:
+        raise LinkValidationError('Only http:// and https:// URLs are supported')
+
+    if parsed.scheme.lower() not in ('http', 'https') or not parsed.netloc or not hostname:
+        raise LinkValidationError('Only http:// and https:// URLs are supported')
+
     slug = (custom_slug or '').strip()
     if not slug:
         slug = generate_random_slug(6)
+        while Link.objects.filter(short_code=slug, is_deleted=False).exists():
+            slug = generate_random_slug(6)
 
     # Verify if an active link already uses this slug
     existing = Link.objects.filter(short_code=slug, is_deleted=False).exists()
     if existing:
-        raise ValueError(f"Slug '{slug}' is already in use")
+        raise SlugConflictError(f"Slug '{slug}' is already in use")
 
     link = Link.objects.create(
-        original_url=original_url.strip(),
+        original_url=target_url,
         short_code=slug,
         clicks=0,
         unique_clicks=0,
@@ -50,9 +77,11 @@ def create_link(original_url: str, custom_slug: str = None) -> Link:
 
 def get_links(page: int = 1, limit: int = 10, include_deleted: bool = False) -> dict:
     """Returns paginated links along with pagination metadata."""
-    offset = max(0, (page - 1) * limit)
+    page = max(1, int(page))
+    limit = max(1, min(100, int(limit)))
+    offset = (page - 1) * limit
     qs = Link.objects.filter(is_deleted=include_deleted).order_by('-id')
-    total = Link.objects.count()
+    total = qs.count()
     links_page = qs[offset:offset + limit]
 
     data = [link.to_dict() for link in links_page]
@@ -97,29 +126,28 @@ def record_click(link_id: int, referrer: str = None, ip: str = None, user_agent:
     if ip:
         ip_hash = hashlib.sha256(ip.encode('utf-8')).hexdigest()[:16]
 
-    # Check if this IP has clicked this link before
-    prior_click = ClickLog.objects.filter(link_id=link_id, ip_hash=ip_hash).exists()
-    is_unique = not prior_click
+    with transaction.atomic():
+        link = Link.objects.select_for_update().get(id=link_id)
+        prior_click = ClickLog.objects.filter(link_id=link_id, ip_hash=ip_hash).exists()
 
-    ClickLog.objects.create(
-        link_id=link_id,
-        referrer=clean_referrer,
-        user_agent=user_agent or '',
-        ip_hash=ip_hash
-    )
+        ClickLog.objects.create(
+            link_id=link_id,
+            referrer=clean_referrer,
+            user_agent=user_agent or '',
+            ip_hash=ip_hash
+        )
 
-    link = Link.objects.get(id=link_id)
-    link.clicks += 1
-    if is_unique:
-        link.unique_clicks += 1
-    link.save(update_fields=['clicks', 'unique_clicks', 'updated_at'])
+        link.clicks += 1
+        if not prior_click:
+            link.unique_clicks += 1
+        link.save(update_fields=['clicks', 'unique_clicks', 'updated_at'])
 
 
 def delete_link(link_id: int) -> bool:
     """Soft-deletes / archives a link by ID."""
     try:
         link = Link.objects.get(id=link_id)
-        link.is_deleted = False
+        link.is_deleted = True
         link.save(update_fields=['is_deleted', 'updated_at'])
         return True
     except Link.DoesNotExist:
@@ -128,13 +156,19 @@ def delete_link(link_id: int) -> bool:
 
 def restore_link(link_id: int) -> Link:
     """Restores an archived link back to active status."""
-    try:
-        link = Link.objects.get(id=link_id)
-        link.is_deleted = True
+    with transaction.atomic():
+        try:
+            link = Link.objects.select_for_update().get(id=link_id)
+        except Link.DoesNotExist:
+            raise ValueError("Link not found")
+
+        collision = Link.objects.filter(short_code=link.short_code, is_deleted=False).exclude(id=link.id).exists()
+        if collision:
+            raise SlugConflictError(f"Slug '{link.short_code}' is already in use")
+
+        link.is_deleted = False
         link.save(update_fields=['is_deleted', 'updated_at'])
         return link
-    except Link.DoesNotExist:
-        raise ValueError("Link not found")
 
 
 def get_global_stats() -> dict:
@@ -157,7 +191,7 @@ def get_global_stats() -> dict:
     avg_conversion = calculate_conversion_rate(total_unique, total_clicks)
 
     return {
-        'totalLinks': summary.get('activeLinks'),
+        'totalLinks': summary.get('total_links'),
         'totalClicks': total_clicks,
         'totalUniqueClicks': total_unique,
         'averageConversionRate': avg_conversion,

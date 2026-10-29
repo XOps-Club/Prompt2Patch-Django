@@ -39,8 +39,11 @@ def links_collection_api(request):
     Handles GET /links (list links) and POST /links (create short link).
     """
     if request.method == 'GET':
-        page = int(request.GET.get('page', 1))
-        limit = int(request.GET.get('limit', 10))
+        try:
+            page = max(1, int(request.GET.get('page', 1)))
+            limit = max(1, min(100, int(request.GET.get('limit', 10))))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'page and limit must be integers'}, status=400)
         include_deleted = request.GET.get('includeDeleted', 'false').lower() == 'true'
 
         result = services.get_links(page=page, limit=limit, include_deleted=include_deleted)
@@ -66,17 +69,12 @@ def links_collection_api(request):
                 'details': {'originalUrl': ['Target URL is required']}
             }, status=400)
 
-        # Basic URL format validation
-        if not (original_url.startswith('http://') or original_url.startswith('https://')):
-            return JsonResponse({
-                'error': 'Validation failed',
-                'details': {'originalUrl': ['URL must start with http:// or https://']}
-            }, status=400)
-
         try:
             link = services.create_link(original_url, custom_slug)
             return JsonResponse(link.to_dict(), status=201)
-        except ValueError as e:
+        except services.LinkValidationError as e:
+            return JsonResponse({'error': str(e)}, status=400)
+        except services.SlugConflictError as e:
             return JsonResponse({'error': str(e)}, status=409)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -112,6 +110,8 @@ def link_detail_api(request, identifier):
     try:
         link_id = int(identifier)
         link = services.get_link_by_id(link_id)
+        if link is None:
+            link = services.get_link_by_short_code(identifier)
     except ValueError:
         link = services.get_link_by_short_code(identifier)
 
@@ -145,6 +145,8 @@ def qr_code_api(request, identifier):
     try:
         link_id = int(identifier)
         link = services.get_link_by_id(link_id)
+        if link is None:
+            link = services.get_link_by_short_code(identifier)
     except ValueError:
         link = services.get_link_by_short_code(identifier)
 
