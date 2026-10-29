@@ -3,7 +3,7 @@
 
 {% block content %}
 <!-- Hero Section & Shortener Card -->
-<div>
+<div id="about">
   <div class="hero-headline">
     <div class="hero-pill-badge">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
@@ -59,7 +59,7 @@
             type="text"
             id="urlInput"
             class="clean-input"
-            placeholder="https://github.com/trending..."
+            placeholder="https://example.com/your-page"
             required
             autocomplete="off"
           />
@@ -247,7 +247,7 @@
 </div>
 
 <!-- Telemetry Section (StatsCards) -->
-<div>
+<div id="analytics">
   <div class="section-headline">
     <div class="section-accent-bar"></div>
     <h2 class="section-title">System Telemetry</h2>
@@ -441,6 +441,30 @@
         </button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Developer Documentation -->
+<div id="docs">
+  <div class="section-headline">
+    <div class="section-accent-bar" style="background: #06b6d4; box-shadow: 0 0 10px #06b6d4;"></div>
+    <h2 class="section-title">Developer Docs</h2>
+    <span class="section-sub">LinkSnip API quick reference</span>
+  </div>
+
+  <div class="table-card" style="padding: 1.5rem;">
+    <p style="color: var(--text-muted); margin-bottom: 1rem;">
+      Create a short link by sending a JSON request to <code>POST /links</code>.
+      Targets must use <code>http://</code> or <code>https://</code>.
+    </p>
+    <pre style="color: var(--text-main); white-space: pre-wrap;"><code>{
+  "originalUrl": "https://example.com/your-page",
+  "customSlug": "optional-alias"
+}</code></pre>
+    <p style="color: var(--text-muted); margin-top: 1rem;">
+      Use <code>GET /links/stats</code> for telemetry, or open
+      <code>GET /links/&lt;id&gt;/qr</code> for a QR code URL.
+    </p>
   </div>
 </div>
 {% endblock %}

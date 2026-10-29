@@ -7,8 +7,8 @@
 ---
 
 ## 1. Team Information
-- **Team Name**: 
-- **Members**: 1. ______________________  2. ______________________  3. ______________________
+- **Team Name**: The Mosaic
+- **Members**: 1. Arpit Kumar Shah  2. Kunal Verma  3. Nittin Kumar Pandey
 - **Working Branch**: `team-solution`
 
 ---
@@ -17,29 +17,35 @@
 *Show how you guided the AI through iterative reasoning rather than asking it to auto-solve blindly:*
 
 ### Prompt 1
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Six reported link lifecycle, telemetry, QR, pagination, and URL-validation defects
 - **Exact Prompt Sent to AI**:
-  > 
+  > Read the README.md file, it contains 6 bugs "## 🛠️ Incident Report: Reported Defects & Mission Brief": ... Go through the code and fix them.
+  >
+  > The AI inspected the README, service layer, views, frontend helper, and tests; it then implemented the six focused fixes and ran the Django test suite.
 
 ---
 
 ### Prompt 2
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Django server startup and homepage failure
 - **Exact Prompt Sent to AI**:
-  > 
+  > Running "python manage.py runserver" gives a bunch of errors. Fix them.
+  >
+  > The AI reproduced the request-time failure, identified the missing `links_link` table, applied migrations, and verified system checks and an HTTP 200 homepage response.
 
 ---
 
 ### Prompt 3
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: URL scope clarification and broken in-page navigation
 - **Exact Prompt Sent to AI**:
-  > 
+  > Is the link shortener supposed to accept only github links and nothing else? Also, #about, analytics, and docs doesn't work in the server.
+  >
+  > The AI verified that the service accepts valid HTTP(S) URLs rather than GitHub-only URLs, added matching `about`, `analytics`, and `docs` anchors, and verified the rendered homepage.
 
 ---
 
 ## 3. Final Submission Checklist Before Calling Judge
-- [ ] All test suites pass 100% (`make test`)
-- [ ] Web application manually verified in browser (`make run`)
-- [ ] Code committed to a dedicated branch (`team-solution`, not `main`)
-- [ ] Pull Request opened with clean description
-- [ ] 3 prompt sequences documented above in Section 2
+- [ ] All test suites pass 100% (`make test`; `make` is unavailable in the Windows environment)
+- [x] Web application manually verified with a `runserver` smoke test and HTTP 200 response
+- [x] Code is on the dedicated `team-solution` branch
+- [ ] Pull Request opened with clean description (requires repository hosting access)
+- [x] 3 prompt sequences documented above in Section 2

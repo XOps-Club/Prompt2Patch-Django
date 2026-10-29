@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // QR Code generator helper
   function getQrCodeUrl(shortUrl) {
     if (!shortUrl) return '';
-    return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(shortUrl)}`;
   }
 
   // Modal Control
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load Directory Links Table
   async function fetchLinks() {
-    const isArchived = activeTab === 'active';
+    const isArchived = activeTab === 'archived';
 
     try {
       const res = await fetch(`/links?page=${page}&limit=10&includeDeleted=${isArchived}`);
