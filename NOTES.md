@@ -7,8 +7,8 @@
 ---
 
 ## 1. Team Information
-- **Team Name**: 
-- **Members**: 1. ______________________  2. ______________________  3. ______________________
+- **Team Name**: Claude's Plan
+- **Members**: 1. Prit Thacker  2. Surbhi Jain
 - **Working Branch**: `team-solution`
 
 ---
@@ -17,21 +17,21 @@
 *Show how you guided the AI through iterative reasoning rather than asking it to auto-solve blindly:*
 
 ### Prompt 1
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Swapping of Archived and ACtive buttons in the UI
 - **Exact Prompt Sent to AI**:
   > 
 
 ---
 
 ### Prompt 2
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Qr Builder
 - **Exact Prompt Sent to AI**:
   > 
 
 ---
 
 ### Prompt 3
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Restore and Archive Buttons
 - **Exact Prompt Sent to AI**:
   > 
 
