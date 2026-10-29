@@ -12,6 +12,13 @@ class Link(models.Model):
 
     class Meta:
         ordering = ['-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['short_code'],
+                condition=models.Q(is_deleted=False),
+                name='unique_active_link_short_code',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.short_code} -> {self.original_url}"

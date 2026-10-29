@@ -1,8 +1,10 @@
 import os
 import re
+from io import StringIO
 from django.conf import settings
+from django.db import IntegrityError, transaction
+from django.core.management import call_command
 from django.test import TestCase, Client
-from django.urls import reverse
 from links.models import Link, ClickLog
 from links import services
 
@@ -27,6 +29,42 @@ class LinkSnipStandardAPITests(TestCase):
         with self.assertRaises(ValueError, msg="Expected ValueError when reusing an active custom slug"):
             services.create_link('https://example.com/second', custom_slug=slug)
 
+    def test_database_rejects_duplicate_active_short_codes(self):
+        link = services.create_link(
+            'https://example.com/first-active-owner',
+            custom_slug='unique-active-slug'
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Link.objects.create(
+                    original_url='https://example.com/second-active-owner',
+                    short_code=link.short_code
+                )
+
+    def test_create_link_rejects_non_http_target_urls(self):
+        for url in ('javascript:alert(1)', 'https:///missing-host'):
+            with self.subTest(url=url):
+                with self.assertRaises(services.InvalidTargetUrl):
+                    services.create_link(url)
+
+    def test_create_link_accepts_uppercase_https_scheme(self):
+        link = services.create_link('HTTPS://example.com/path')
+        self.assertEqual(link.original_url, 'HTTPS://example.com/path')
+
+    def test_create_link_rejects_invalid_custom_slugs(self):
+        for slug in ('Uppercase', 'contains space', 'slash/character', 'a' * 65, 123):
+            with self.subTest(slug=slug):
+                with self.assertRaises(services.InvalidSlug):
+                    services.create_link('https://example.com/target', custom_slug=slug)
+
+    def test_create_link_accepts_custom_slugs_using_supported_characters(self):
+        link = services.create_link(
+            'https://example.com/target',
+            custom_slug='valid-slug_123'
+        )
+        self.assertEqual(link.short_code, 'valid-slug_123')
+
     def test_records_clicks_and_updates_click_count(self):
         link = services.create_link('https://example.com/click-test')
         services.record_click(link.id, 'https://twitter.com', '127.0.0.1')
@@ -35,6 +73,15 @@ class LinkSnipStandardAPITests(TestCase):
 
         updated = services.get_link_by_id(link.id)
         self.assertEqual(updated.clicks, 3)
+        self.assertEqual(updated.unique_clicks, 2)
+
+    def test_clicks_without_ip_are_counted_as_unique(self):
+        link = services.create_link('https://example.com/click-without-ip')
+        services.record_click(link.id)
+        services.record_click(link.id)
+
+        updated = services.get_link_by_id(link.id)
+        self.assertEqual(updated.clicks, 2)
         self.assertEqual(updated.unique_clicks, 2)
 
     def test_calculate_conversion_rate_preserves_fractional_percentages(self):
@@ -55,6 +102,68 @@ class LinkSnipStandardAPITests(TestCase):
         self.assertEqual(len(page1['data']), 10)
         self.assertEqual(page1['pagination']['total'], 15)
         self.assertEqual(page1['pagination']['totalPages'], 2)
+
+    def test_search_filters_before_pagination_by_slug_and_destination(self):
+        for i in range(12):
+            services.create_link(f'https://example.com/item-{i}')
+        target = services.create_link(
+            'https://destination.example/search-target',
+            custom_slug='search-target'
+        )
+
+        slug_results = services.get_links(page=1, limit=1, search='search')
+        destination_results = services.get_links(
+            page=1,
+            limit=1,
+            search='destination.example'
+        )
+        self.assertEqual(slug_results['pagination']['total'], 1)
+        self.assertEqual(slug_results['data'][0]['id'], target.id)
+        self.assertEqual(destination_results['data'][0]['id'], target.id)
+
+    def test_links_api_returns_bad_request_for_invalid_pagination(self):
+        response = Client().get('/links?page=not-a-number')
+        self.assertEqual(response.status_code, 400)
+
+    def test_links_api_returns_bad_request_for_invalid_custom_slug(self):
+        response = Client().post(
+            '/links',
+            data={
+                'originalUrl': 'https://example.com/target',
+                'customSlug': 'Uppercase'
+            },
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_links_api_rejects_json_values_that_are_not_objects(self):
+        for body in ('null', '[]', '"not an object"'):
+            with self.subTest(body=body):
+                response = Client().post(
+                    '/links',
+                    data=body,
+                    content_type='application/json'
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_links_api_requires_csrf_for_link_creation(self):
+        response = Client(enforce_csrf_checks=True).post(
+            '/links',
+            data={'originalUrl': 'https://example.com/target'},
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_link_detail_rejects_unsupported_post_method(self):
+        link = services.create_link('https://example.com/detail-method')
+        response = Client().post(f'/links/{link.id}')
+        self.assertEqual(response.status_code, 405)
+
+    def test_pagination_rejects_non_positive_values(self):
+        for page, limit in ((0, 10), (1, 0), (1, -1)):
+            with self.subTest(page=page, limit=limit):
+                with self.assertRaises(ValueError):
+                    services.get_links(page=page, limit=limit)
 
 
 class LinkSnipCoreOperationsAndAnalyticsTests(TestCase):
@@ -117,6 +226,26 @@ class LinkSnipCoreOperationsAndAnalyticsTests(TestCase):
             "Expected QR URL to target destination URL"
         )
 
+    def test_global_referrers_exclude_archived_links(self):
+        active = services.create_link('https://example.com/active-referrer')
+        archived = services.create_link('https://example.com/archived-referrer')
+        Link.objects.filter(id=archived.id).update(is_deleted=True)
+        ClickLog.objects.create(link=active, referrer='active.example')
+        ClickLog.objects.create(link=archived, referrer='archived.example')
+
+        stats = services.get_global_stats()
+        self.assertEqual(
+            stats['topReferrers'],
+            [{'referrer': 'active.example', 'count': 1}]
+        )
+
+    def test_record_click_truncates_long_referrers_to_model_limit(self):
+        link = services.create_link('https://example.com/long-referrer')
+        referrer = 'https://' + ('a' * 300) + '.example/path'
+        services.record_click(link.id, referrer=referrer)
+        click = ClickLog.objects.get(link=link)
+        self.assertLessEqual(len(click.referrer), 255)
+
     def test_isolates_pagination_total_and_total_pages_between_active_and_archived_views(self):
         """Verifies that active and archived views isolate pagination counts."""
         for i in range(3):
@@ -145,6 +274,18 @@ class LinkSnipCoreOperationsAndAnalyticsTests(TestCase):
 
         with self.assertRaises(ValueError, msg="Restoring archived link with claimed slug must fail"):
             services.restore_link(link1.id)
+
+    def test_seed_command_preserves_existing_user_data(self):
+        link = services.create_link(
+            'https://example.com/user-data',
+            custom_slug='user-data'
+        )
+        click = ClickLog.objects.create(link=link, referrer='user.example')
+
+        call_command('seed', stdout=StringIO())
+
+        self.assertTrue(Link.objects.filter(id=link.id).exists())
+        self.assertTrue(ClickLog.objects.filter(id=click.id).exists())
 
 
 class LinkSnipFrontendServiceContractsTests(TestCase):

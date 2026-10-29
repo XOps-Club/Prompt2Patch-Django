@@ -1,10 +1,12 @@
 import json
+import logging
 from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpResponseNotFound
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from . import services
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request):
@@ -32,19 +34,26 @@ def index_view(request):
     return render(request, 'index.html', context)
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def links_collection_api(request):
     """
     Handles GET /links (list links) and POST /links (create short link).
     """
     if request.method == 'GET':
-        page = int(request.GET.get('page', 1))
-        limit = int(request.GET.get('limit', 10))
-        include_deleted = request.GET.get('includeDeleted', 'false').lower() == 'true'
-
-        result = services.get_links(page=page, limit=limit, include_deleted=include_deleted)
-        return JsonResponse(result)
+        try:
+            page = int(request.GET.get('page', 1))
+            limit = int(request.GET.get('limit', 10))
+            include_deleted = request.GET.get('includeDeleted', 'false').lower() == 'true'
+            search = request.GET.get('search', '')
+            result = services.get_links(
+                page=page,
+                limit=limit,
+                include_deleted=include_deleted,
+                search=search
+            )
+            return JsonResponse(result)
+        except ValueError as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
     elif request.method == 'POST':
         # Accept either JSON body or standard form POST
@@ -52,10 +61,13 @@ def links_collection_api(request):
         if request.content_type == 'application/json' and request.body:
             try:
                 data = json.loads(request.body)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 return JsonResponse({'error': 'Invalid JSON body'}, status=400)
         else:
             data = request.POST.dict()
+
+        if not isinstance(data, dict):
+            return JsonResponse({'error': 'Request body must be a JSON object'}, status=400)
 
         original_url = data.get('originalUrl') or data.get('original_url')
         custom_slug = data.get('customSlug') or data.get('custom_slug')
@@ -66,20 +78,18 @@ def links_collection_api(request):
                 'details': {'originalUrl': ['Target URL is required']}
             }, status=400)
 
-        # Basic URL format validation
-        if not (original_url.startswith('http://') or original_url.startswith('https://')):
-            return JsonResponse({
-                'error': 'Validation failed',
-                'details': {'originalUrl': ['URL must start with http:// or https://']}
-            }, status=400)
-
         try:
             link = services.create_link(original_url, custom_slug)
             return JsonResponse(link.to_dict(), status=201)
+        except services.InvalidTargetUrl as e:
+            return JsonResponse({'error': str(e)}, status=400)
+        except services.InvalidSlug as e:
+            return JsonResponse({'error': str(e)}, status=400)
         except ValueError as e:
             return JsonResponse({'error': str(e)}, status=409)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+        except Exception:
+            logger.exception('Unexpected error creating short link')
+            return JsonResponse({'error': 'Could not create link'}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -89,8 +99,7 @@ def stats_api(request):
     return JsonResponse(stats)
 
 
-@csrf_exempt
-@require_http_methods(["GET", "DELETE", "POST"])
+@require_http_methods(["GET", "DELETE"])
 def link_detail_api(request, identifier):
     """
     Handles:
@@ -121,7 +130,6 @@ def link_detail_api(request, identifier):
     return JsonResponse(link.to_dict())
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def restore_link_api(request, link_id):
     """POST /links/<id>/restore - Restores an archived link"""
@@ -133,8 +141,9 @@ def restore_link_api(request, link_id):
         if "not found" in msg.lower():
             return JsonResponse({'error': msg}, status=404)
         return JsonResponse({'error': msg}, status=409)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception('Unexpected error restoring link %s', link_id)
+        return JsonResponse({'error': 'Could not restore link'}, status=500)
 
 
 @require_http_methods(["GET"])

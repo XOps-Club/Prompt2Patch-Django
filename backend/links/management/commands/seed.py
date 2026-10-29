@@ -1,5 +1,6 @@
 import datetime
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 from links.models import Link, ClickLog
 
@@ -7,12 +8,15 @@ from links.models import Link, ClickLog
 class Command(BaseCommand):
     help = 'Seeds sample short links and click telemetry logs'
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--reset',
+            action='store_true',
+            help='Delete existing links and click logs before seeding.',
+        )
+
     def handle(self, *args, **options):
         self.stdout.write("Seeding sample LinkSnip data...")
-
-        # Clear existing
-        ClickLog.objects.all().delete()
-        Link.objects.all().delete()
 
         now = timezone.now()
 
@@ -91,25 +95,41 @@ class Command(BaseCommand):
             }
         ]
 
-        for item in sample_links:
-            created_at = now - datetime.timedelta(days=item['days_ago'])
-            link = Link.objects.create(
-                original_url=item['url'],
-                short_code=item['code'],
-                clicks=item['clicks'],
-                unique_clicks=item['unique'],
-                is_deleted=item['is_deleted']
-            )
-            Link.objects.filter(id=link.id).update(created_at=created_at)
+        created_count = 0
+        with transaction.atomic():
+            if options['reset']:
+                ClickLog.objects.all().delete()
+                Link.objects.all().delete()
 
-            # Insert clicks
-            for i in range(item['clicks']):
-                ref = item['referrers'][i % len(item['referrers'])]
-                ClickLog.objects.create(
-                    link=link,
-                    referrer=ref,
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    ip_hash=f'ip_sample_{i % 10}'
+            for item in sample_links:
+                created_at = now - datetime.timedelta(days=item['days_ago'])
+                link, created = Link.objects.get_or_create(
+                    short_code=item['code'],
+                    defaults={
+                        'original_url': item['url'],
+                        'clicks': item['clicks'],
+                        'unique_clicks': item['unique'],
+                        'is_deleted': item['is_deleted'],
+                    }
                 )
 
-        self.stdout.write(self.style.SUCCESS(f"Successfully seeded {len(sample_links)} links with telemetry!"))
+                if not created:
+                    continue
+
+                created_count += 1
+                Link.objects.filter(id=link.id).update(created_at=created_at)
+
+                for i in range(item['clicks']):
+                    ref = item['referrers'][i % len(item['referrers'])]
+                    ClickLog.objects.create(
+                        link=link,
+                        referrer=ref,
+                        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        ip_hash=f'ip_sample_{i % 10}'
+                    )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Seeded {created_count} new links; existing links and logs were preserved."
+            )
+        )

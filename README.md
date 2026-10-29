@@ -87,8 +87,11 @@ pip install -r requirements.txt
 # Run migrations
 python manage.py migrate
 
-# Seed sample links & telemetry data
+# Add sample links & telemetry data without deleting existing records
 python manage.py seed
+
+# Explicitly clear all links and click logs before reseeding
+python manage.py seed --reset
 ```
 
 ### 4. Running the Development Server
@@ -98,6 +101,9 @@ python manage.py runserver
 make run
 ```
 Open your browser at **`http://localhost:8000`**.
+
+For deployment, set `DJANGO_DEBUG=false`, provide a strong `DJANGO_SECRET_KEY`, and set
+`DJANGO_ALLOWED_HOSTS` to a comma-separated list of the hostnames serving the app.
 
 ---
 

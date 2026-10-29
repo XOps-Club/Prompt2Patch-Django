@@ -67,7 +67,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // QR Code generator helper
   function getQrCodeUrl(shortUrl) {
     if (!shortUrl) return '';
-    return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(shortUrl)}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[character]);
+  }
+
+  async function copyText(text) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      throw new Error('Clipboard access is unavailable in this browser');
+    }
+    await navigator.clipboard.writeText(text);
   }
 
   // Modal Control
@@ -75,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!modalBackdrop) return;
     if (show && currentCreatedLink) {
       const fullUrl = `${window.location.origin}/${currentCreatedLink.short_code}`;
-      modalQrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(fullUrl)}`;
+      modalQrImage.src = getQrCodeUrl(fullUrl);
       modalShortCodeText.textContent = `/${currentCreatedLink.short_code}`;
       modalBackdrop.style.display = 'flex';
     } else {
@@ -102,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function fetchGlobalStats() {
     try {
       const res = await fetch('/links/stats');
-      if (!res.ok) return;
+      if (!res.ok) throw new Error(`Stats request failed (${res.status})`);
       const stats = await res.json();
 
       if (telemetryActiveLinks) {
@@ -139,7 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const now = new Date();
       const past = new Date(isoString);
-      const diffSecs = Math.floor((now.getTime() - past.getTime()) / 1000);
+      if (Number.isNaN(past.getTime())) return 'recently';
+      const diffSecs = Math.max(0, Math.floor((now.getTime() - past.getTime()) / 1000));
       if (diffSecs < 60) return 'just now';
       const diffMins = Math.floor(diffSecs / 60);
       if (diffMins < 60) return `${diffMins}m ago`;
@@ -154,10 +172,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load Directory Links Table
   async function fetchLinks() {
-    const isArchived = activeTab === 'active';
+    const isArchived = activeTab === 'archived';
 
     try {
-      const res = await fetch(`/links?page=${page}&limit=10&includeDeleted=${isArchived}`);
+      const params = new URLSearchParams({
+        page,
+        limit: 10,
+        includeDeleted: isArchived,
+        search: searchQuery
+      });
+      const res = await fetch(`/links?${params}`);
       if (!res.ok) throw new Error('Registry query error');
       const data = await res.json();
 
@@ -175,9 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Render Table Rows
   function renderTable(links, isArchived) {
-    const filteredLinks = searchQuery
-      ? links.filter(link => link.short_code === searchQuery)
-      : links;
+    const filteredLinks = links;
 
     if (filteredLinks.length === 0) {
       tableEmptyState.style.display = 'block';
@@ -198,25 +220,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const shortUrl = `${window.location.origin}/${link.short_code}`;
       const isCopied = copiedId === link.id;
       const domain = getDomain(link.original_url);
+      const escapedShortUrl = escapeHtml(shortUrl);
+      const escapedCode = escapeHtml(link.short_code);
+      const escapedOriginalUrl = escapeHtml(link.original_url);
+      const escapedReferrer = escapeHtml(link.top_referrer || 'direct');
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>
           <div class="link-identity">
             <img
-              src="https://www.google.com/s2/favicons?domain=${domain}&sz=32"
+              src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32"
               alt=""
               class="favicon-icon"
               onerror="this.style.display='none'"
             />
             <div style="display: flex; align-items: center; gap: 0.4rem;">
               <a
-                href="${shortUrl}"
+                href="${escapedShortUrl}"
                 target="_blank"
                 rel="noreferrer"
                 class="slug-text"
               >
-                /${link.short_code}
+                /${escapedCode}
               </a>
               <button
                 type="button"
@@ -224,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 style="padding: 0.2rem 0.35rem;"
                 title="Copy link"
                 data-id="${link.id}"
-                data-code="${link.short_code}"
+                data-code="${escapedCode}"
               >
                 ${isCopied
                   ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--neon-green)" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`
@@ -236,8 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
 
         <td>
-          <span class="target-url-text" title="${link.original_url}">
-            ${link.original_url}
+          <span class="target-url-text" title="${escapedOriginalUrl}">
+            ${escapedOriginalUrl}
           </span>
         </td>
 
@@ -250,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>
           <div class="badge-referrer">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-            <span>${link.top_referrer || 'direct'}</span>
+            <span>${escapedReferrer}</span>
           </div>
         </td>
 
@@ -267,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td style="text-align: right;">
           <div style="display: inline-flex; gap: 0.35rem; align-items: center;">
             <a
-              href="${shortUrl}"
+              href="${escapedShortUrl}"
               target="_blank"
               rel="noreferrer"
               class="btn-ghost"
@@ -395,22 +421,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Result Copy Button
   if (resultCopyBtn) {
-    resultCopyBtn.addEventListener('click', () => {
+    resultCopyBtn.addEventListener('click', async () => {
       if (!currentCreatedLink) return;
       const fullShortUrl = `${window.location.origin}/${currentCreatedLink.short_code}`;
-      navigator.clipboard.writeText(fullShortUrl);
-      resultCopyLabel.textContent = 'Copied';
-      resultCopyLabel.style.color = 'var(--neon-green)';
-      setTimeout(() => {
-        resultCopyLabel.textContent = 'Copy';
-        resultCopyLabel.style.color = '';
-      }, 2000);
+      try {
+        await copyText(fullShortUrl);
+        resultCopyLabel.textContent = 'Copied';
+        resultCopyLabel.style.color = 'var(--neon-green)';
+        setTimeout(() => {
+          resultCopyLabel.textContent = 'Copy';
+          resultCopyLabel.style.color = '';
+        }, 2000);
+      } catch (err) {
+        alert(err.message || 'Clipboard access failed');
+      }
     });
   }
 
   if (resultQrBtn) {
     resultQrBtn.addEventListener('click', () => {
-      setShowQrModal(false);
+      setShowQrModal(true);
     });
   }
 
@@ -423,13 +453,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = parseInt(copyBtn.getAttribute('data-id'), 10);
         const code = copyBtn.getAttribute('data-code');
         const fullUrl = `${window.location.origin}/${code}`;
-        navigator.clipboard.writeText(fullUrl);
-        copiedId = id;
-        fetchLinks();
-        setTimeout(() => {
-          copiedId = null;
+        try {
+          await copyText(fullUrl);
+          copiedId = id;
           fetchLinks();
-        }, 2000);
+          setTimeout(() => {
+            copiedId = null;
+            fetchLinks();
+          }, 2000);
+        } catch (err) {
+          alert(err.message || 'Clipboard access failed');
+        }
         return;
       }
 
@@ -504,6 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       searchQuery = e.target.value.trim();
+      page = 1;
       fetchLinks();
     });
   }
