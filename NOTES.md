@@ -43,4 +43,3 @@
 - [x] Web application manually verified locally (`http://127.0.0.1:8000/`)
 - [x] Code committed to a dedicated branch (`Vecter_Zero-solution`, not `main`)
 - [x] Pull Request opened with a clean description
-- [ ] 3 prompt sequences documented above in Section 2
