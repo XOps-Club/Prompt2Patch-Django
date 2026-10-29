@@ -47,6 +47,32 @@ class LinkSnipStandardAPITests(TestCase):
         rate3 = services.calculate_conversion_rate(1, 3)
         self.assertTrue(33.0 < rate3 < 34.0, f"Expected ~33.33, got {rate3}")
 
+    def test_create_link_rejects_unsupported_url_protocols(self):
+        unsupported_urls = [
+            'javascript:alert(1)',
+            'file:///tmp/linksnip.txt',
+            'ftp://example.com/file',
+            'data:text/plain,hello',
+        ]
+
+        for original_url in unsupported_urls:
+            with self.subTest(original_url=original_url):
+                with self.assertRaises(ValueError):
+                    services.create_link(original_url)
+
+    def test_create_link_accepts_only_well_formed_http_targets(self):
+        services.create_link('HTTPS://example.com/secure')
+
+        malformed_urls = [
+            'https://',
+            'https://user:password@example.com',
+            'https://[invalid',
+        ]
+        for original_url in malformed_urls:
+            with self.subTest(original_url=original_url):
+                with self.assertRaises(ValueError):
+                    services.create_link(original_url)
+
     def test_page_1_returns_first_batch_of_urls(self):
         for i in range(15):
             services.create_link(f'https://example.com/item-{i}')

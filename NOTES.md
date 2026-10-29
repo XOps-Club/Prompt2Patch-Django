@@ -7,9 +7,9 @@
 ---
 
 ## 1. Team Information
-- **Team Name**: 
+- **Team Name**: Delta
 - **Members**: 1. ______________________  2. ______________________  3. ______________________
-- **Working Branch**: `team-solution`
+- **Working Branch**: `Delta`
 
 ---
 
@@ -17,23 +17,30 @@
 *Show how you guided the AI through iterative reasoning rather than asking it to auto-solve blindly:*
 
 ### Prompt 1
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Reproduce and classify LinkSnip regressions
 - **Exact Prompt Sent to AI**:
-  > 
+  > Clone the challenge repository into a new workspace folder, create the
+  > Team Delta branch, run the baseline suite unchanged, and report all failing
+  > test names and assertions without changing application code.
 
 ---
 
 ### Prompt 2
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: Lifecycle, analytics, pagination, and collision root causes
 - **Exact Prompt Sent to AI**:
-  > 
+  > Trace each failing lifecycle and query test from the public suite to the
+  > service implementation. Form three falsifiable hypotheses, prove the
+  > wrong assignments and aggregate boundaries, and propose one minimal fix per
+  > verified root cause.
 
 ---
 
 ### Prompt 3
-- **Defect / Area Investigated**: 
+- **Defect / Area Investigated**: QR and protocol contracts plus verification
 - **Exact Prompt Sent to AI**:
-  > 
+  > Implement the backend and frontend QR contracts, centralize strict HTTP/HTTPS
+  > URL validation, run every links test, check the Django configuration, migrate
+  > the database, and verify the application through its local server.
 
 ---
 
