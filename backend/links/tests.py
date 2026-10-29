@@ -196,3 +196,21 @@ class LinkSnipFrontendServiceContractsTests(TestCase):
             'qrserver.com' in fn_body or 'encodeURIComponent' in fn_body,
             "Expected getQrCodeUrl to return valid QR API endpoint"
         )
+
+    def test_frontend_tab_state_requests_and_renders_correct_lifecycle_actions(self):
+        js_path = os.path.join(settings.BASE_DIR, '..', 'frontend', 'static', 'js', 'app.js')
+        with open(js_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        self.assertIn("const isArchived = activeTab === 'archived';", content)
+        self.assertIn('class="btn-secondary restore-link-btn"', content)
+        self.assertIn('class="btn-danger-ghost archive-link-btn"', content)
+        self.assertIn('function escapeHtml(value)', content)
+
+    def test_create_link_rejects_unsafe_custom_slugs(self):
+        unsafe_slugs = ['"><img src=x onerror=alert(1)>', 'spaces not allowed', '../admin', 'slash/route']
+
+        for slug in unsafe_slugs:
+            with self.subTest(slug=slug):
+                with self.assertRaises(ValueError):
+                    services.create_link('https://example.com', custom_slug=slug)

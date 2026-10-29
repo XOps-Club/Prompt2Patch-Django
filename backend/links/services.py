@@ -1,6 +1,7 @@
 import secrets
 import string
 import hashlib
+import re
 from urllib.parse import quote, urlparse
 from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
@@ -55,6 +56,8 @@ def create_link(original_url: str, custom_slug: str = None) -> Link:
     slug = (custom_slug or '').strip()
     if not slug:
         slug = generate_random_slug(6)
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', slug):
+        raise ValueError('Custom slug may contain only letters, numbers, hyphens, and underscores')
 
     # Verify if an active link already uses this slug
     existing = Link.objects.filter(short_code=slug, is_deleted=False).exists()

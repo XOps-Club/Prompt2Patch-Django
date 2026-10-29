@@ -70,6 +70,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(shortUrl)}`;
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
   // Modal Control
   function setShowQrModal(show) {
     if (!modalBackdrop) return;
@@ -154,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load Directory Links Table
   async function fetchLinks() {
-    const isArchived = activeTab === 'active';
+    const isArchived = activeTab === 'archived';
 
     try {
       const res = await fetch(`/links?page=${page}&limit=10&includeDeleted=${isArchived}`);
@@ -196,27 +205,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     filteredLinks.forEach(link => {
       const shortUrl = `${window.location.origin}/${link.short_code}`;
+      const safeShortCode = escapeHtml(link.short_code);
+      const safeOriginalUrl = escapeHtml(link.original_url);
+      const safeTopReferrer = escapeHtml(link.top_referrer || 'direct');
       const isCopied = copiedId === link.id;
       const domain = getDomain(link.original_url);
+      const safeDomain = escapeHtml(domain);
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>
           <div class="link-identity">
             <img
-              src="https://www.google.com/s2/favicons?domain=${domain}&sz=32"
+              src="https://www.google.com/s2/favicons?domain=${safeDomain}&sz=32"
               alt=""
               class="favicon-icon"
               onerror="this.style.display='none'"
             />
             <div style="display: flex; align-items: center; gap: 0.4rem;">
               <a
-                href="${shortUrl}"
+                href="${escapeHtml(shortUrl)}"
                 target="_blank"
                 rel="noreferrer"
                 class="slug-text"
               >
-                /${link.short_code}
+                /${safeShortCode}
               </a>
               <button
                 type="button"
@@ -224,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 style="padding: 0.2rem 0.35rem;"
                 title="Copy link"
                 data-id="${link.id}"
-                data-code="${link.short_code}"
+                data-code="${safeShortCode}"
               >
                 ${isCopied
                   ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--neon-green)" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`
@@ -236,8 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
 
         <td>
-          <span class="target-url-text" title="${link.original_url}">
-            ${link.original_url}
+          <span class="target-url-text" title="${safeOriginalUrl}">
+            ${safeOriginalUrl}
           </span>
         </td>
 
@@ -250,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>
           <div class="badge-referrer">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-            <span>${link.top_referrer || 'direct'}</span>
+            <span>${safeTopReferrer}</span>
           </div>
         </td>
 
