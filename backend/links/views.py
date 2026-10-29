@@ -66,11 +66,12 @@ def links_collection_api(request):
                 'details': {'originalUrl': ['Target URL is required']}
             }, status=400)
 
-        # Basic URL format validation
-        if not (original_url.startswith('http://') or original_url.startswith('https://')):
+        try:
+            original_url = services.validate_target_url(original_url)
+        except ValueError as e:
             return JsonResponse({
                 'error': 'Validation failed',
-                'details': {'originalUrl': ['URL must start with http:// or https://']}
+                'details': {'originalUrl': [str(e)]}
             }, status=400)
 
         try:
